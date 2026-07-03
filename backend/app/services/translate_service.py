@@ -1,5 +1,5 @@
 import os
-
+import re
 import httpx
 
 from app.schemas.documents import TranslateRequest, TranslateResponse
@@ -12,6 +12,30 @@ from app.schemas.documents import TranslateRequest, TranslateResponse
 MYMEMORY_URL = "https://api.mymemory.translated.net/get"
 MAX_CHUNK_CHARS = 480  # stay safely under the 500-char limit
 
+# Devanagari mapping for Hinglish Transliteration
+VOWELS = {
+    'अ': 'a', 'आ': 'aa', 'इ': 'i', 'ई': 'ee', 'उ': 'u', 'ऊ': 'oo', 'ऋ': 'ri',
+    'ए': 'e', 'ऐ': 'ai', 'ओ': 'o', 'औ': 'au', 'अं': 'an', 'अः': 'ah', 'ऑ': 'o'
+}
+
+MATRAS = {
+    'ा': 'aa', 'ि': 'i', 'ी': 'ee', 'ु': 'u', 'ू': 'oo', 'ृ': 'ri',
+    'े': 'e', 'ै': 'ai', 'ो': 'o', 'ौ': 'au', 'ं': 'n', 'ँ': 'n', 'ः': 'h', 'ॅ': 'e'
+}
+
+CONSONANTS = {
+    'क': 'k', 'ख': 'kh', 'ग': 'g', 'घ': 'gh', 'ङ': 'n',
+    'च': 'ch', 'छ': 'chh', 'ज': 'j', 'झ': 'jh', 'ञ': 'n',
+    'ट': 't', 'ठ': 'th', 'ड': 'd', 'ढ': 'dh', 'ण': 'n',
+    'त': 't', 'थ': 'th', 'द': 'd', 'ध': 'dh', 'न': 'n',
+    'प': 'p', 'फ': 'ph', 'ब': 'b', 'भ': 'bh', 'म': 'm',
+    'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 'sh', 'ष': 'sh', 'स': 's', 'ह': 'h',
+    'क्ष': 'ksh', 'त्र': 'tr', 'ज्ञ': 'gy',
+    'क़': 'q', 'ख़': 'kh', 'ग़': 'g', 'ज़': 'z', 'ड़': 'd', 'ढ़': 'dh', 'फ़': 'f'
+}
+
+VIRAMA = '्'
+
 
 class TranslationServiceError(Exception):
     pass
@@ -19,13 +43,34 @@ class TranslationServiceError(Exception):
 
 class TranslationService:
     async def translate(self, payload: TranslateRequest) -> TranslateResponse:
+        # Check if the target is Hinglish (Hindi in Latin script)
+        is_hinglish = payload.target_language == "hi-Latn"
+        actual_target = "hi" if is_hinglish else payload.target_language
+
+        # Create a proxy request for the standard translation phase
+        proxy_payload = TranslateRequest(
+            text=payload.text,
+            source_language=payload.source_language,
+            target_language=actual_target
+        )
+
         # If a self-hosted LibreTranslate instance is configured, prefer it.
         base_url = os.getenv("LIBRETRANSLATE_URL")
         if base_url:
-            return await self._translate_with_libretranslate(base_url, payload)
+            response = await self._translate_with_libretranslate(base_url, proxy_payload)
+        else:
+            response = await self._translate_with_mymemory(proxy_payload)
 
-        # Default: use the free MyMemory API.
-        return await self._translate_with_mymemory(payload)
+        # If Hinglish is requested, convert the Devanagari Hindi result to Latin script
+        if is_hinglish:
+            transliterated = self._transliterate_devanagari_to_roman(response.translated_text)
+            return TranslateResponse(
+                translated_text=transliterated,
+                source_language=payload.source_language,
+                target_language=payload.target_language
+            )
+
+        return response
 
     # ------------------------------------------------------------------
     # MyMemory (free, no key)
@@ -75,7 +120,6 @@ class TranslationService:
         current = ""
 
         # Try to split on sentence-ending punctuation first.
-        import re
         sentences = re.split(r"(?<=[.!?])\s+", text.replace("\n", " "))
 
         for sentence in sentences:
@@ -130,3 +174,62 @@ class TranslationService:
             source_language=payload.source_language,
             target_language=payload.target_language,
         )
+
+    # ------------------------------------------------------------------
+    # Transliteration (Devanagari -> Romanized Hinglish)
+    # ------------------------------------------------------------------
+    def _transliterate_devanagari_to_roman(self, text: str) -> str:
+        """Transliterates Devanagari script text into standard Romanized Hinglish."""
+        words = text.split(' ')
+        result_words = []
+        
+        for word in words:
+            if not re.search(r'[\u0900-\u097F]', word):
+                result_words.append(word)
+                continue
+                
+            transliterated = ""
+            i = 0
+            n = len(word)
+            
+            while i < n:
+                char = word[i]
+                
+                if char in CONSONANTS:
+                    base = CONSONANTS[char]
+                    
+                    if i + 1 < n:
+                        next_char = word[i + 1]
+                        
+                        if next_char == VIRAMA:
+                            transliterated += base
+                            i += 2
+                            continue
+                        elif next_char in MATRAS:
+                            transliterated += base + MATRAS[next_char]
+                            i += 2
+                            continue
+                    
+                    # End of word consonant schwa deletion rule
+                    if i + 1 == n or (i + 1 < n and word[i + 1] in ['।', ',', '.', '!', '?', '-', '\n']):
+                        transliterated += base
+                    else:
+                        transliterated += base + 'a'
+                    i += 1
+                    
+                elif char in VOWELS:
+                    transliterated += VOWELS[char]
+                    i += 1
+                elif char in MATRAS:
+                    transliterated += MATRAS[char]
+                    i += 1
+                elif char == '।':
+                    transliterated += '.'
+                    i += 1
+                else:
+                    transliterated += char
+                    i += 1
+                    
+            result_words.append(transliterated)
+            
+        return ' '.join(result_words)

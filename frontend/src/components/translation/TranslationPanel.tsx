@@ -5,6 +5,7 @@ import { useDocumentStore } from "../../store/useDocumentStore";
 import type { LanguageCode } from "../../types/document";
 
 const languages: Array<{ code: LanguageCode; label: string }> = [
+  { code: "hi-Latn", label: "Hinglish (Hindi in Latin)" },
   { code: "hi", label: "Hindi" },
   { code: "en", label: "English" },
   { code: "fr", label: "French" },

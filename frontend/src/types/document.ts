@@ -1,4 +1,4 @@
-export type LanguageCode = "auto" | "en" | "hi" | "fr" | "es";
+export type LanguageCode = "auto" | "en" | "hi" | "fr" | "es" | "hi-Latn";
 
 export type ReaderTheme = "system" | "light" | "dark";
 
