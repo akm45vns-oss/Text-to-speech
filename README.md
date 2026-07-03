@@ -1,3 +1,12 @@
+---
+title: Text to speech
+emoji: 📖
+colorFrom: indigo
+colorTo: green
+sdk: docker
+app_port: 7860
+---
+
 # ReadLingo AI
 
 ReadLingo AI is a document reader for uploading PDFs or images, extracting text, translating it, and generating listenable audio.
