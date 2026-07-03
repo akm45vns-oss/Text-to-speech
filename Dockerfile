@@ -19,6 +19,7 @@ WORKDIR /app
 # System dependencies (for PyMuPDF / Pillow)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependencies and install

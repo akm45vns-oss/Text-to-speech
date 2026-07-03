@@ -5,12 +5,11 @@ import httpx
 from app.schemas.documents import TranslateRequest, TranslateResponse
 
 # ---------------------------------------------------------------------------
-# MyMemory is a free translation API (no key required, 1 000 words/day).
-# https://mymemory.translated.net/doc/spec.php
-# Max 500 characters per request — we chunk longer texts automatically.
+# Translation URLs
 # ---------------------------------------------------------------------------
+GOOGLE_TRANSLATE_URL = "https://translate.googleapis.com/translate_a/single"
 MYMEMORY_URL = "https://api.mymemory.translated.net/get"
-MAX_CHUNK_CHARS = 480  # stay safely under the 500-char limit
+MAX_CHUNK_CHARS = 480
 
 # Devanagari mapping for Hinglish Transliteration
 VOWELS = {
@@ -47,63 +46,109 @@ class TranslationService:
         is_hinglish = payload.target_language == "hi-Latn"
         actual_target = "hi" if is_hinglish else payload.target_language
 
-        # Create a proxy request for the standard translation phase
+        # Create a proxy request for standard translation
         proxy_payload = TranslateRequest(
             text=payload.text,
             source_language=payload.source_language,
             target_language=actual_target
         )
 
-        # If a self-hosted LibreTranslate instance is configured, prefer it.
+        # 1. Prefer LibreTranslate if explicit config is provided
         base_url = os.getenv("LIBRETRANSLATE_URL")
         if base_url:
-            response = await self._translate_with_libretranslate(base_url, proxy_payload)
-        else:
-            response = await self._translate_with_mymemory(proxy_payload)
+            try:
+                response = await self._translate_with_libretranslate(base_url, proxy_payload)
+                return self._finalize_response(response, is_hinglish, payload)
+            except Exception as exc:
+                print(f"LibreTranslate failed: {exc}. Trying fallback...", flush=True)
 
-        # If Hinglish is requested, convert the Devanagari Hindi result to Latin script
+        # 2. Try Google Translate (unofficial gtx endpoint) - very stable & high limits
+        try:
+            response = await self._translate_with_google(proxy_payload)
+            return self._finalize_response(response, is_hinglish, payload)
+        except Exception as exc:
+            print(f"Google Translate failed: {exc}. Trying MyMemory...", flush=True)
+
+        # 3. Try MyMemory as a final fallback
+        try:
+            response = await self._translate_with_mymemory(proxy_payload)
+            return self._finalize_response(response, is_hinglish, payload)
+        except Exception as exc:
+            print(f"MyMemory failed: {exc}", flush=True)
+            raise TranslationServiceError(
+                "Translation service is currently unavailable. Please try again later."
+            ) from exc
+
+    def _finalize_response(self, response: TranslateResponse, is_hinglish: bool, original_payload: TranslateRequest) -> TranslateResponse:
         if is_hinglish:
             transliterated = self._transliterate_devanagari_to_roman(response.translated_text)
             return TranslateResponse(
                 translated_text=transliterated,
+                source_language=original_payload.source_language,
+                target_language=original_payload.target_language
+            )
+        return response
+
+    # ------------------------------------------------------------------
+    # Google Translate (Free, gtx client)
+    # ------------------------------------------------------------------
+    async def _translate_with_google(self, payload: TranslateRequest) -> TranslateResponse:
+        source = payload.source_language if payload.source_language not in ("auto", "") else "auto"
+        
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                GOOGLE_TRANSLATE_URL,
+                params={
+                    "client": "gtx",
+                    "sl": source,
+                    "tl": payload.target_language,
+                    "dt": "t",
+                    "q": payload.text
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Parse Google translation array response structure
+            translated_text = ""
+            if data and isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                translated_text = "".join(sentence[0] for sentence in data[0] if sentence and len(sentence) > 0)
+                
+            if not translated_text:
+                raise TranslationServiceError("Google Translate returned empty response.")
+                
+            return TranslateResponse(
+                translated_text=translated_text,
                 source_language=payload.source_language,
                 target_language=payload.target_language
             )
 
-        return response
-
     # ------------------------------------------------------------------
-    # MyMemory (free, no key)
+    # MyMemory (Free, fallback)
     # ------------------------------------------------------------------
     async def _translate_with_mymemory(self, payload: TranslateRequest) -> TranslateResponse:
-        # MyMemory uses "en|hi" style language pairs; map "auto" → "en" as a
-        # sensible default when no source language is specified.
         source = payload.source_language if payload.source_language not in ("auto", "") else "en"
         langpair = f"{source}|{payload.target_language}"
 
         chunks = self._chunk_text(payload.text)
         translated_parts: list[str] = []
 
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                for chunk in chunks:
-                    response = await client.get(
-                        MYMEMORY_URL,
-                        params={"q": chunk, "langpair": langpair},
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-                    translated = data.get("responseData", {}).get("translatedText") or chunk
-                    # MyMemory sometimes returns the error string as the translation.
-                    if isinstance(translated, str) and translated.startswith("MYMEMORY WARNING"):
-                        raise TranslationServiceError(
-                            "MyMemory daily quota reached. Try again tomorrow or configure a LibreTranslate server."
-                        )
-                    translated_parts.append(translated)
-        except httpx.HTTPError as exc:
-            raise TranslationServiceError(
-                "Translation service is unavailable. Check your internet connection."
-            ) from exc
+        async with httpx.AsyncClient(timeout=15) as client:
+            for chunk in chunks:
+                response = await client.get(
+                    MYMEMORY_URL,
+                    params={
+                        "q": chunk, 
+                        "langpair": langpair,
+                        "de": "readlingo-app@outlook.com"  # Increases limits, reduces cloud IP bans
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                translated = data.get("responseData", {}).get("translatedText") or chunk
+                if isinstance(translated, str) and translated.startswith("MYMEMORY WARNING"):
+                    raise TranslationServiceError("MyMemory quota limit reached.")
+                translated_parts.append(translated)
 
         return TranslateResponse(
             translated_text="\n".join(translated_parts),
@@ -111,15 +156,34 @@ class TranslationService:
             target_language=payload.target_language,
         )
 
+    # ------------------------------------------------------------------
+    # LibreTranslate
+    # ------------------------------------------------------------------
+    async def _translate_with_libretranslate(self, base_url: str, payload: TranslateRequest) -> TranslateResponse:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{base_url.rstrip('/')}/translate",
+                json={
+                    "q": payload.text,
+                    "source": payload.source_language,
+                    "target": payload.target_language,
+                    "format": "text",
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return TranslateResponse(
+                translated_text=data.get("translatedText", ""),
+                source_language=payload.source_language,
+                target_language=payload.target_language
+            )
+
     def _chunk_text(self, text: str) -> list[str]:
-        """Split *text* into pieces ≤ MAX_CHUNK_CHARS at sentence boundaries."""
         if len(text) <= MAX_CHUNK_CHARS:
             return [text]
 
         chunks: list[str] = []
         current = ""
-
-        # Try to split on sentence-ending punctuation first.
         sentences = re.split(r"(?<=[.!?])\s+", text.replace("\n", " "))
 
         for sentence in sentences:
@@ -129,7 +193,6 @@ class TranslationService:
             else:
                 if current:
                     chunks.append(current)
-                # If a single sentence exceeds the limit, hard-split on words.
                 if len(sentence) > MAX_CHUNK_CHARS:
                     word_buf = ""
                     for word in sentence.split():
@@ -150,36 +213,9 @@ class TranslationService:
         return chunks or [text[:MAX_CHUNK_CHARS]]
 
     # ------------------------------------------------------------------
-    # LibreTranslate (self-hosted, optional)
-    # ------------------------------------------------------------------
-    async def _translate_with_libretranslate(self, base_url: str, payload: TranslateRequest) -> TranslateResponse:
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                response = await client.post(
-                    f"{base_url.rstrip('/')}/translate",
-                    json={
-                        "q": payload.text,
-                        "source": payload.source_language,
-                        "target": payload.target_language,
-                        "format": "text",
-                    },
-                )
-                response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise TranslationServiceError("LibreTranslate is unavailable.") from exc
-
-        data = response.json()
-        return TranslateResponse(
-            translated_text=data.get("translatedText", ""),
-            source_language=payload.source_language,
-            target_language=payload.target_language,
-        )
-
-    # ------------------------------------------------------------------
-    # Transliteration (Devanagari -> Romanized Hinglish)
+    # Transliteration
     # ------------------------------------------------------------------
     def _transliterate_devanagari_to_roman(self, text: str) -> str:
-        """Transliterates Devanagari script text into standard Romanized Hinglish."""
         words = text.split(' ')
         result_words = []
         
@@ -210,7 +246,6 @@ class TranslationService:
                             i += 2
                             continue
                     
-                    # End of word consonant schwa deletion rule
                     if i + 1 == n or (i + 1 < n and word[i + 1] in ['।', ',', '.', '!', '?', '-', '\n']):
                         transliterated += base
                     else:
