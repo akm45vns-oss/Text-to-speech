@@ -109,7 +109,7 @@ export function UploadDropzone() {
         <div className="space-y-2 mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Read. Translate. Listen.</h1>
           <p className="text-muted-foreground text-lg max-w-lg mx-auto">
-            Drop a document here and AKM-Lingo opens it in a focused reader with translation and voice controls ready.
+            Drop a document here and AKM45-Lingo opens it in a focused reader with translation and voice controls ready.
           </p>
         </div>
 
