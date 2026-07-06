@@ -21,6 +21,14 @@ const voices = [
   { id: "es-ES-ElviraNeural", label: "Spanish Female" },
 ];
 
+const defaultVoices: Record<LanguageCode, string> = {
+  "hi-Latn": "en-IN-NeerjaNeural",
+  "hi": "hi-IN-SwaraNeural",
+  "en": "en-IN-NeerjaNeural",
+  "fr": "fr-FR-DeniseNeural",
+  "es": "es-ES-ElviraNeural",
+};
+
 const languages: Array<{ code: LanguageCode; label: string }> = [
   { code: "hi-Latn", label: "Hinglish (Hindi in Latin)" },
   { code: "hi", label: "Hindi" },
@@ -353,7 +361,11 @@ export function PremiumAudioPlayer() {
                     <Select 
                       value={settings.targetLanguage} 
                       onChange={(e) => {
-                        updateSettings({ targetLanguage: e.target.value as LanguageCode });
+                        const targetLang = e.target.value as LanguageCode;
+                        updateSettings({ 
+                          targetLanguage: targetLang,
+                          voice: defaultVoices[targetLang] || "en-IN-NeerjaNeural"
+                        });
                         setTranslatedText("");
                         setAudioUrl("");
                         setJobId(null);

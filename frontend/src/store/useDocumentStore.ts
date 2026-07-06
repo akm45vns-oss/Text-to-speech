@@ -28,7 +28,7 @@ export const useDocumentStore = create<DocumentState>((set) => ({
   documentStats: null,
   settings: {
     theme: "system",
-    targetLanguage: "hi",
+    targetLanguage: "en",
     voice: "en-IN-NeerjaNeural",
     playbackSpeed: 1,
     fontSize: 18,
