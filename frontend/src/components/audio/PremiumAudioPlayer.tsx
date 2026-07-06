@@ -166,13 +166,13 @@ export function PremiumAudioPlayer() {
         </Button>
       </div>
 
-      <div className="flex flex-col lg:flex-row flex-1">
+      <div className="flex flex-col flex-1 relative">
         
         {/* Main Player Area */}
-        <div className="flex-1 flex flex-col p-8 lg:p-12 items-center justify-center relative">
+        <div className="flex-1 flex flex-col p-6 lg:p-12 items-center justify-center relative">
           
           {/* Animated Waveform Visualization */}
-          <div className="flex items-end justify-center gap-1.5 h-32 mb-12 w-full max-w-sm">
+          <div className="flex items-end justify-center gap-1 h-32 mb-12 w-full max-w-sm px-4">
             {Array.from({ length: 40 }).map((_, i) => (
               <motion.div
                 key={i}
@@ -185,7 +185,7 @@ export function PremiumAudioPlayer() {
                   duration: 0.8 + Math.random() * 0.5,
                   ease: "easeInOut"
                 }}
-                className={cn("w-2 rounded-full", isPlaying ? "bg-primary" : "bg-muted-foreground/30")}
+                className={cn("flex-1 max-w-[8px] rounded-full", isPlaying ? "bg-primary" : "bg-muted-foreground/30")}
               />
             ))}
           </div>
@@ -212,7 +212,7 @@ export function PremiumAudioPlayer() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-12 w-12 rounded-full"
+                className="h-12 w-12 rounded-full shrink-0"
                 onClick={() => {
                   if (audioRef.current) audioRef.current.currentTime = 0;
                   setIsPlaying(false);
@@ -224,7 +224,7 @@ export function PremiumAudioPlayer() {
 
               <Button
                 size="icon"
-                className="h-20 w-20 rounded-full shadow-glass"
+                className="h-20 w-20 rounded-full shadow-glass shrink-0"
                 onClick={() => setIsPlaying(!isPlaying)}
                 disabled={!audioUrl || ttsMutation.isPending || !!jobId}
                 isLoading={ttsMutation.isPending}
@@ -238,12 +238,12 @@ export function PremiumAudioPlayer() {
                 <a 
                   href={audioUrl} 
                   download 
-                  className="inline-flex items-center justify-center rounded-full font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary h-12 w-12 bg-transparent hover:bg-muted text-foreground"
+                  className="inline-flex items-center justify-center shrink-0 rounded-full font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary h-12 w-12 bg-transparent hover:bg-muted text-foreground"
                 >
                   <Download size={24} />
                 </a>
               ) : (
-                <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full" disabled>
+                <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full shrink-0" disabled>
                   <Download size={24} />
                 </Button>
               )}
@@ -251,16 +251,17 @@ export function PremiumAudioPlayer() {
           </div>
         </div>
 
-        {/* Settings Sidebar */}
+        {/* Settings Sidebar Overlay */}
         <AnimatePresence>
           {showSettings && (
             <motion.div 
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              className="border-l border-border/40 bg-muted/10 overflow-hidden shrink-0"
+              initial={{ x: 320, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 320, opacity: 0 }}
+              transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+              className="absolute top-0 right-0 bottom-0 w-[320px] max-w-full border-l border-border/40 bg-card/95 backdrop-blur-xl shadow-2xl z-40 overflow-y-auto"
             >
-              <div className="p-6 flex flex-col gap-6 w-[320px]">
+              <div className="p-6 flex flex-col gap-6">
                 <h3 className="font-bold uppercase text-xs tracking-widest text-muted-foreground">Audio Settings</h3>
                 
                 <div className="flex flex-col gap-3">
