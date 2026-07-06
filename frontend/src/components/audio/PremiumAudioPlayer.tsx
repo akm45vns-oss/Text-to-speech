@@ -30,7 +30,7 @@ export function PremiumAudioPlayer() {
   const setAudioUrl = useDocumentStore((state) => state.setAudioUrl);
   const workflowState = useDocumentStore((state) => state.workflowState);
   
-  const speechText = (workflowState === "translate_listen" ? translatedText : originalText) || originalText;
+  const speechText = workflowState === "translate_listen" ? translatedText : originalText;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -39,8 +39,17 @@ export function PremiumAudioPlayer() {
   const [jobId, setJobId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Reset audio and job when the text to speak changes (e.g., after translation completes)
+  useEffect(() => {
+    if (speechText) {
+      setJobId(null);
+      setAudioUrl("");
+      setIsPlaying(false);
+    }
+  }, [speechText, setAudioUrl]);
+
   const ttsMutation = useMutation({
-    mutationFn: () => synthesizeSpeechJob(speechText, settings.voice, settings.playbackSpeed),
+    mutationFn: () => synthesizeSpeechJob(speechText!, settings.voice, settings.playbackSpeed),
     onSuccess: (response) => {
       setJobId(response.jobId);
     },
