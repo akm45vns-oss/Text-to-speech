@@ -2,6 +2,17 @@ export type LanguageCode = "auto" | "en" | "hi" | "fr" | "es" | "hi-Latn";
 
 export type ReaderTheme = "system" | "light" | "dark";
 
+export type WorkflowState = "idle" | "processing" | "ready" | "reading" | "listening" | "translating" | "translate_listen";
+
+export interface DocumentStats {
+  words: number;
+  readingMinutes: number;
+  listeningMinutes: number;
+  detectedLanguage: string;
+  confidence: string;
+  processingTimeMs: number;
+}
+
 export interface DocumentRecord {
   id: string;
   filename: string;
