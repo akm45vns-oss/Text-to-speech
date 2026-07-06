@@ -24,6 +24,7 @@ export function TranslationPanel() {
   const settings = useDocumentStore((state) => state.settings);
   const updateSettings = useDocumentStore((state) => state.updateSettings);
   const setTranslatedText = useDocumentStore((state) => state.setTranslatedText);
+  const workflowState = useDocumentStore((state) => state.workflowState);
 
   const [jobId, setJobId] = useState<string | null>(null);
 
@@ -33,6 +34,20 @@ export function TranslationPanel() {
       setJobId(response.jobId);
     },
   });
+
+  // Automatically start translation if the user chose a translating workflow
+  useEffect(() => {
+    if (
+      (workflowState === "translate_listen" || workflowState === "translating") &&
+      !translatedText &&
+      originalText &&
+      !translationMutation.isPending &&
+      !translationMutation.isError &&
+      !jobId
+    ) {
+      translationMutation.mutate();
+    }
+  }, [workflowState, translatedText, originalText, translationMutation, jobId]);
 
   const { data: jobStatus } = useQuery({
     queryKey: ["job", jobId],
