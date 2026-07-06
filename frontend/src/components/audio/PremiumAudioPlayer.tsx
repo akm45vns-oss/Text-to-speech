@@ -21,7 +21,7 @@ const voices = [
   { id: "es-ES-ElviraNeural", label: "Spanish Female" },
 ];
 
-const defaultVoices: Record<LanguageCode, string> = {
+const defaultVoices: Partial<Record<LanguageCode, string>> = {
   "hi-Latn": "en-IN-NeerjaNeural",
   "hi": "hi-IN-SwaraNeural",
   "en": "en-IN-NeerjaNeural",
