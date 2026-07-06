@@ -1,0 +1,4 @@
+Original: Hello, how are you? What is your name?
+Hinglish: namaste, aap kaise hain? aapakaa naam kyaa hai?
+Source Lang: auto
+Target Lang: hi-Latn

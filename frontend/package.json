@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.81.5",
+    "clsx": "^2.1.1",
     "framer-motion": "^12.23.0",
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "^4.10.38",
@@ -18,6 +19,7 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.52.2",
     "react-router-dom": "^7.0.2",
+    "tailwind-merge": "^3.6.0",
     "tesseract.js": "^5.1.1",
     "zod": "^3.23.8",
     "zustand": "^5.0.2"

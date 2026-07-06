@@ -1,0 +1,4 @@
+Devanagari: नमस्ते -> Romanized: namaste (Expected: namaste)
+Devanagari: आप कैसे हैं? -> Romanized: aap kaise hain? (Expected: aap kaise hain?)
+Devanagari: भारत -> Romanized: bhaarat (Expected: bharat)
+Devanagari: मेरा नाम अमित है। -> Romanized: meraa naam amit hai. (Expected: mera naam amit hai.)
