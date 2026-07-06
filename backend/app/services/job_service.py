@@ -285,14 +285,10 @@ class JobService:
             except Exception:
                 pass
                 
-        # Cleanup partial file
-        partial_path = AUDIO_DIR / f"{job.id}_partial.mp3"
-        try:
-            if partial_path.exists():
-                partial_path.unlink()
-        except Exception:
-            pass
-                
+        # Do NOT delete the partial file here! 
+        # If the user's browser is currently streaming the partial file, deleting it will 
+        # cause their subsequent HTTP Range requests to return 404, breaking playback instantly!
+        
         job.result_data = f"/audio/{final_filename}"
         job.status = "COMPLETED"
         job.progress = 100.0
