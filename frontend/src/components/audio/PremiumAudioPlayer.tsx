@@ -259,7 +259,7 @@ export function PremiumAudioPlayer() {
                 )}
               </Button>
 
-              {audioUrl ? (
+              {audioUrl && (!jobId || jobStatus?.status === "COMPLETED") ? (
                 <a 
                   href={audioUrl} 
                   download 
@@ -268,7 +268,7 @@ export function PremiumAudioPlayer() {
                   <Download size={24} />
                 </a>
               ) : (
-                <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full shrink-0" disabled>
+                <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full shrink-0 opacity-50" disabled>
                   <Download size={24} />
                 </Button>
               )}
