@@ -224,6 +224,7 @@ class JobService:
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         
         chunk_files = []
+        partial_merged = False
         
         for chunk in chunks:
             if chunk.status == "COMPLETED" and chunk.result_data:
@@ -252,6 +253,15 @@ class JobService:
                     db.commit()
                     
                     chunk_files.append(chunk_path)
+                    
+                    if not partial_merged and job.progress >= 50 and len(chunk_files) > 0:
+                        partial_filename = f"{job.id}_partial.mp3"
+                        partial_path = AUDIO_DIR / partial_filename
+                        self._merge_mp3_files(chunk_files, partial_path)
+                        job.result_data = f"/audio/{partial_filename}"
+                        db.commit()
+                        partial_merged = True
+                        
                     break # Success, break retry loop
                     
                 except Exception as e:
@@ -274,6 +284,14 @@ class JobService:
                     cf.unlink()
             except Exception:
                 pass
+                
+        # Cleanup partial file
+        partial_path = AUDIO_DIR / f"{job.id}_partial.mp3"
+        try:
+            if partial_path.exists():
+                partial_path.unlink()
+        except Exception:
+            pass
                 
         job.result_data = f"/audio/{final_filename}"
         job.status = "COMPLETED"

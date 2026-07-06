@@ -67,14 +67,39 @@ export function PremiumAudioPlayer() {
     },
   });
 
+  // Handle audio URL updates (both partial at 50% and final at 100%)
   useEffect(() => {
-    if (jobStatus?.status === "COMPLETED" && jobStatus.resultData) {
-      setAudioUrl(jobStatus.resultData);
-      setIsPlaying(true);
+    if (!jobStatus || !jobStatus.resultData) return;
+
+    if (jobStatus.progress >= 50 && jobStatus.resultData !== audioUrl) {
+      if (audioUrl && audioRef.current) {
+        // Upgrade from partial to final: save state
+        const current = audioRef.current.currentTime;
+        const wasPlaying = !audioRef.current.paused;
+        
+        setAudioUrl(jobStatus.resultData);
+        
+        audioRef.current.onloadedmetadata = () => {
+          if (audioRef.current) {
+            audioRef.current.currentTime = current;
+            if (wasPlaying) {
+              audioRef.current.play().catch(() => setIsPlaying(false));
+            }
+          }
+        };
+      } else {
+        // Initial load (either at 50% partial or 100% full)
+        setAudioUrl(jobStatus.resultData);
+        setIsPlaying(true);
+      }
+    }
+
+    // Clear job ID once fully complete
+    if (jobStatus.status === "COMPLETED") {
       const timer = setTimeout(() => setJobId(null), 2000);
       return () => clearTimeout(timer);
     }
-  }, [jobStatus, setAudioUrl]);
+  }, [jobStatus?.resultData, jobStatus?.progress, jobStatus?.status, audioUrl, setAudioUrl]);
 
   useEffect(() => {
     if (!audioUrl && speechText && !ttsMutation.isPending && !ttsMutation.isError && !jobId) {
@@ -132,7 +157,7 @@ export function PremiumAudioPlayer() {
   return (
     <Card className="flex flex-col w-full h-full shadow-glass border-border/60 overflow-hidden relative bg-card/80 backdrop-blur-3xl min-h-[600px]">
       <AnimatePresence>
-        {jobId && <ProgressOverlay job={jobStatus || null} title="Generating Audio" />}
+        {jobId && !audioUrl && <ProgressOverlay job={jobStatus || null} title="Generating Audio" />}
       </AnimatePresence>
 
       {audioUrl && (
@@ -226,7 +251,7 @@ export function PremiumAudioPlayer() {
                 size="icon"
                 className="h-20 w-20 rounded-full shadow-glass shrink-0"
                 onClick={() => setIsPlaying(!isPlaying)}
-                disabled={!audioUrl || ttsMutation.isPending || !!jobId}
+                disabled={!audioUrl || ttsMutation.isPending}
                 isLoading={ttsMutation.isPending}
               >
                 {!ttsMutation.isPending && (
