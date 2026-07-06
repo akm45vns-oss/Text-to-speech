@@ -1,6 +1,6 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Play, Pause, Square, Settings2, ArrowLeft } from "lucide-react";
-import { synthesizeSpeech } from "../../services/api";
+import { synthesizeSpeechJob, getJobStatus } from "../../services/api";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "../../utils/cn";
+import { ProgressOverlay } from "../workflow/ProgressOverlay";
 
 const voices = [
   { id: "en-IN-NeerjaNeural", label: "Indian English Female" },
@@ -35,21 +36,42 @@ export function PremiumAudioPlayer() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const ttsMutation = useMutation({
-    mutationFn: () => synthesizeSpeech(speechText, settings.voice, settings.playbackSpeed),
+    mutationFn: () => synthesizeSpeechJob(speechText, settings.voice, settings.playbackSpeed),
     onSuccess: (response) => {
-      setAudioUrl(response.audioUrl);
-      setIsPlaying(true);
+      setJobId(response.jobId);
+    },
+  });
+
+  const { data: jobStatus } = useQuery({
+    queryKey: ["job", jobId],
+    queryFn: () => getJobStatus(jobId!),
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 1000;
+      if (data.status === "COMPLETED" || data.status === "FAILED") return false;
+      return 1000;
     },
   });
 
   useEffect(() => {
-    if (!audioUrl && speechText && !ttsMutation.isPending && !ttsMutation.isError) {
+    if (jobStatus?.status === "COMPLETED" && jobStatus.resultData) {
+      setAudioUrl(jobStatus.resultData);
+      setIsPlaying(true);
+      const timer = setTimeout(() => setJobId(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [jobStatus, setAudioUrl]);
+
+  useEffect(() => {
+    if (!audioUrl && speechText && !ttsMutation.isPending && !ttsMutation.isError && !jobId) {
       ttsMutation.mutate();
     }
-  }, [audioUrl, speechText, ttsMutation]);
+  }, [audioUrl, speechText, ttsMutation, jobId]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -100,6 +122,10 @@ export function PremiumAudioPlayer() {
 
   return (
     <Card className="flex flex-col w-full h-full shadow-glass border-border/60 overflow-hidden relative bg-card/80 backdrop-blur-3xl min-h-[600px]">
+      <AnimatePresence>
+        {jobId && <ProgressOverlay job={jobStatus || null} title="Generating Audio" />}
+      </AnimatePresence>
+
       {audioUrl && (
         <audio
           ref={audioRef}
@@ -191,7 +217,7 @@ export function PremiumAudioPlayer() {
                 size="icon"
                 className="h-20 w-20 rounded-full shadow-glass"
                 onClick={() => setIsPlaying(!isPlaying)}
-                disabled={!audioUrl || ttsMutation.isPending}
+                disabled={!audioUrl || ttsMutation.isPending || !!jobId}
                 isLoading={ttsMutation.isPending}
               >
                 {!ttsMutation.isPending && (
@@ -264,7 +290,7 @@ export function PremiumAudioPlayer() {
                   variant="outline" 
                   className="mt-4 w-full"
                   onClick={() => ttsMutation.mutate()}
-                  isLoading={ttsMutation.isPending}
+                  isLoading={ttsMutation.isPending || !!jobId}
                 >
                   Regenerate Audio
                 </Button>

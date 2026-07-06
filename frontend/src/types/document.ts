@@ -49,6 +49,21 @@ export interface TtsResponse {
   durationEstimateSeconds: number;
 }
 
+export interface JobInitResponse {
+  jobId: string;
+}
+
+export interface JobResponse {
+  id: string;
+  jobType: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  progress: number;
+  totalChunks: number;
+  completedChunks: number;
+  resultData?: string | null;
+  errorMessage?: string | null;
+}
+
 export interface ReaderSettings {
   theme: ReaderTheme;
   targetLanguage: LanguageCode;

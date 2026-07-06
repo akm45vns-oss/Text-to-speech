@@ -26,6 +26,7 @@ class Base(DeclarativeBase):
 
 def create_db_and_tables() -> None:
     from app.models.document import Audio, Document, Translation
+    from app.models.job import Job, Chunk
 
     Base.metadata.create_all(bind=engine)
 

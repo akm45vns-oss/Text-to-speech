@@ -36,6 +36,18 @@ class TtsService:
         duration = max(1, int((words / 155) * 60 / payload.speed))
         return TtsResponse(audio_url=f"/audio/{filename}", voice=payload.voice, duration_estimate_seconds=duration)
 
+    async def synthesize_to_file(self, payload: TtsRequest, path: Path):
+        """Synthesize text directly to a file path without returning a full TtsResponse."""
+        if edge_tts is None:
+            raise TtsServiceError("edge-tts is not installed.")
+
+        rate = self._speed_to_rate(payload.speed)
+        try:
+            communicate = edge_tts.Communicate(payload.text, payload.voice, rate=rate)
+            await communicate.save(str(path))
+        except Exception as exc:  # pragma: no cover
+            raise TtsServiceError("Speech generation failed.") from exc
+
     def _speed_to_rate(self, speed: float) -> str:
         percent = int((speed - 1) * 100)
         return f"{percent:+d}%"

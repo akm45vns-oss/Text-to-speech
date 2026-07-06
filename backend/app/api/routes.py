@@ -8,16 +8,14 @@ from app.schemas.documents import (
     OcrRequest,
     OcrResponse,
     TranslateRequest,
-    TranslateResponse,
     TtsRequest,
-    TtsResponse,
+    JobResponse,
 )
 from app.services.document_service import DocumentService, DocumentServiceError
-from app.services.translate_service import TranslationService, TranslationServiceError
-from app.services.tts_service import TtsService, TtsServiceError
+from app.services.job_service import JobService, JobServiceError
 
 router = APIRouter()
-
+job_service = JobService()
 
 @router.get("/health")
 def health() -> dict[str, str]:
@@ -40,20 +38,31 @@ def extract_text(payload: OcrRequest, session: Session = Depends(get_session)) -
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/translate", response_model=TranslateResponse, response_model_by_alias=True)
-async def translate(payload: TranslateRequest) -> TranslateResponse:
+@router.post("/translate/job", response_model=dict, response_model_by_alias=True)
+async def translate_job(payload: TranslateRequest, session: Session = Depends(get_session)) -> dict:
     try:
-        return await TranslationService().translate(payload)
-    except TranslationServiceError as exc:
+        # We can pass an empty document_id if not tied directly to one in the payload
+        job_id = job_service.create_translation_job("", payload, session)
+        return {"jobId": job_id}
+    except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-@router.post("/tts", response_model=TtsResponse, response_model_by_alias=True)
-async def tts(payload: TtsRequest) -> TtsResponse:
+@router.post("/tts/job", response_model=dict, response_model_by_alias=True)
+async def tts_job(payload: TtsRequest, session: Session = Depends(get_session)) -> dict:
     try:
-        return await TtsService().synthesize(payload)
-    except TtsServiceError as exc:
+        job_id = job_service.create_tts_job("", payload, session)
+        return {"jobId": job_id}
+    except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/jobs/{job_id}", response_model=JobResponse, response_model_by_alias=True)
+def get_job(job_id: str, session: Session = Depends(get_session)) -> dict:
+    try:
+        return job_service.get_job_status(job_id, session)
+    except JobServiceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/history", response_model=list[HistoryItem], response_model_by_alias=True)

@@ -1,4 +1,4 @@
-import type { LanguageCode, OcrResponse, TranslateResponse, TtsResponse, UploadResponse } from "../types/document";
+import type { LanguageCode, OcrResponse, TranslateResponse, TtsResponse, UploadResponse, JobInitResponse, JobResponse } from "../types/document";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -51,26 +51,33 @@ export async function extractText(documentId: string): Promise<OcrResponse> {
   return readJson<OcrResponse>(response);
 }
 
-export async function translateText(text: string, targetLanguage: LanguageCode, sourceLanguage = "auto"): Promise<TranslateResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/translate`, {
+export async function translateTextJob(text: string, targetLanguage: LanguageCode, sourceLanguage = "auto"): Promise<JobInitResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/translate/job`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, sourceLanguage, targetLanguage }),
   });
 
-  return readJson<TranslateResponse>(response);
+  return readJson<JobInitResponse>(response);
 }
 
-export async function synthesizeSpeech(text: string, voice: string, speed: number): Promise<TtsResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/tts`, {
+export async function synthesizeSpeechJob(text: string, voice: string, speed: number): Promise<JobInitResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/tts/job`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, voice, speed }),
   });
 
-  const payload = await readJson<TtsResponse>(response);
-  return {
-    ...payload,
-    audioUrl: payload.audioUrl.startsWith("http") ? payload.audioUrl : `${API_BASE_URL}${payload.audioUrl}`,
-  };
+  return readJson<JobInitResponse>(response);
+}
+
+export async function getJobStatus(jobId: string): Promise<JobResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}`);
+  const payload = await readJson<JobResponse>(response);
+  
+  if (payload.resultData && payload.resultData.startsWith("/audio/")) {
+     payload.resultData = `${API_BASE_URL}${payload.resultData}`;
+  }
+  
+  return payload;
 }

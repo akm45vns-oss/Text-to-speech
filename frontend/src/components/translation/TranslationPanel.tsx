@@ -1,12 +1,14 @@
-import { useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Languages } from "lucide-react";
-import { translateText } from "../../services/api";
+import { translateTextJob, getJobStatus } from "../../services/api";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import type { LanguageCode } from "../../types/document";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { ProgressOverlay } from "../workflow/ProgressOverlay";
 
 const languages: Array<{ code: LanguageCode; label: string }> = [
   { code: "hi-Latn", label: "Hinglish (Hindi in Latin)" },
@@ -23,13 +25,42 @@ export function TranslationPanel() {
   const updateSettings = useDocumentStore((state) => state.updateSettings);
   const setTranslatedText = useDocumentStore((state) => state.setTranslatedText);
 
+  const [jobId, setJobId] = useState<string | null>(null);
+
   const translationMutation = useMutation({
-    mutationFn: () => translateText(originalText, settings.targetLanguage),
-    onSuccess: (response) => setTranslatedText(response.translatedText),
+    mutationFn: () => translateTextJob(originalText, settings.targetLanguage),
+    onSuccess: (response) => {
+      setJobId(response.jobId);
+    },
   });
 
+  const { data: jobStatus } = useQuery({
+    queryKey: ["job", jobId],
+    queryFn: () => getJobStatus(jobId!),
+    enabled: !!jobId,
+    // Polling every second until complete or failed
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 1000;
+      if (data.status === "COMPLETED" || data.status === "FAILED") return false;
+      return 1000;
+    },
+  });
+
+  useEffect(() => {
+    if (jobStatus?.status === "COMPLETED" && jobStatus.resultData) {
+      setTranslatedText(jobStatus.resultData);
+      const timer = setTimeout(() => setJobId(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [jobStatus, setTranslatedText]);
+
   return (
-    <Card className="h-full flex flex-col shadow-glass border-border/60">
+    <Card className="h-full flex flex-col shadow-glass border-border/60 relative overflow-hidden">
+      <AnimatePresence>
+        {jobId && <ProgressOverlay job={jobStatus || null} title="Translating Document" />}
+      </AnimatePresence>
+
       <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 pb-4">
         <div className="flex flex-col gap-1">
           <CardTitle className="flex items-center gap-2 text-xl tracking-tight">
@@ -58,12 +89,12 @@ export function TranslationPanel() {
 
           <Button 
             className="w-full mt-4 h-11 text-base font-semibold" 
-            disabled={!originalText || translationMutation.isPending} 
+            disabled={!originalText || translationMutation.isPending || !!jobId} 
             isLoading={translationMutation.isPending}
             onClick={() => translationMutation.mutate()}
           >
             {!translationMutation.isPending && <Languages size={18} className="mr-2" />}
-            {translationMutation.isPending ? "Translating..." : "Translate Text"}
+            {translationMutation.isPending ? "Starting Job..." : "Translate Text"}
           </Button>
 
           <div 

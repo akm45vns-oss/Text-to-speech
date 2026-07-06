@@ -43,7 +43,7 @@ class TranslateResponse(_AliasedModel):
 
 
 class TtsRequest(_AliasedModel):
-    text: str = Field(min_length=1, max_length=12000)
+    text: str = Field(min_length=1) # Removed artificial limit for smart chunking
     voice: str = "en-IN-NeerjaNeural"
     speed: float = Field(default=1.0, ge=0.7, le=1.4)
 
@@ -52,6 +52,17 @@ class TtsResponse(_AliasedModel):
     audio_url: str = Field(serialization_alias="audioUrl")
     voice: str
     duration_estimate_seconds: int = Field(serialization_alias="durationEstimateSeconds")
+
+
+class JobResponse(_AliasedModel):
+    id: str
+    job_type: str = Field(serialization_alias="jobType")
+    status: str
+    progress: float
+    total_chunks: int = Field(serialization_alias="totalChunks")
+    completed_chunks: int = Field(serialization_alias="completedChunks")
+    result_data: str | None = Field(default=None, serialization_alias="resultData")
+    error_message: str | None = Field(default=None, serialization_alias="errorMessage")
 
 
 class HistoryItem(_AliasedModel):
