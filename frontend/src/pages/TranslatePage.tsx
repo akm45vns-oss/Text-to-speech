@@ -9,7 +9,7 @@ export function TranslatePage() {
   const originalText = useDocumentStore((state) => state.originalText);
   const workflowState = useDocumentStore((state) => state.workflowState);
 
-  const showTranslate = workflowState === "translating" || workflowState === "translate_listen" || workflowState === "idle" || workflowState === "ready";
+  const showTranslate = workflowState === "translating" || workflowState === "idle" || workflowState === "ready";
   const showListen = workflowState === "listening" || workflowState === "translate_listen" || workflowState === "idle" || workflowState === "ready";
 
   return (

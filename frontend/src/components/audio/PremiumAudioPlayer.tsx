@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Play, Pause, Square, Settings2, ArrowLeft } from "lucide-react";
-import { synthesizeSpeechJob, getJobStatus } from "../../services/api";
+import { synthesizeSpeechJob, getJobStatus, translateTextJob } from "../../services/api";
+import type { LanguageCode } from "../../types/document";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { Button } from "../ui/Button";
 import { Select } from "../ui/Select";
@@ -20,6 +21,14 @@ const voices = [
   { id: "es-ES-ElviraNeural", label: "Spanish Female" },
 ];
 
+const languages: Array<{ code: LanguageCode; label: string }> = [
+  { code: "hi-Latn", label: "Hinglish (Hindi in Latin)" },
+  { code: "hi", label: "Hindi" },
+  { code: "en", label: "English" },
+  { code: "fr", label: "French" },
+  { code: "es", label: "Spanish" },
+];
+
 export function PremiumAudioPlayer() {
   const navigate = useNavigate();
   const originalText = useDocumentStore((state) => state.originalText);
@@ -28,6 +37,7 @@ export function PremiumAudioPlayer() {
   const settings = useDocumentStore((state) => state.settings);
   const updateSettings = useDocumentStore((state) => state.updateSettings);
   const setAudioUrl = useDocumentStore((state) => state.setAudioUrl);
+  const setTranslatedText = useDocumentStore((state) => state.setTranslatedText);
   const workflowState = useDocumentStore((state) => state.workflowState);
   
   const speechText = workflowState === "translate_listen" ? translatedText : originalText;
@@ -37,6 +47,7 @@ export function PremiumAudioPlayer() {
   const [duration, setDuration] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [translateJobId, setTranslateJobId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Reset audio and job when the text to speak changes (e.g., after translation completes)
@@ -47,6 +58,48 @@ export function PremiumAudioPlayer() {
       setIsPlaying(false);
     }
   }, [speechText, setAudioUrl]);
+
+  const translateMutation = useMutation({
+    mutationFn: () => translateTextJob(originalText, settings.targetLanguage),
+    onSuccess: (response) => {
+      setTranslateJobId(response.jobId);
+    },
+  });
+
+  const { data: translateJobStatus } = useQuery({
+    queryKey: ["job", translateJobId],
+    queryFn: () => getJobStatus(translateJobId!),
+    enabled: !!translateJobId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 1000;
+      if (data.status === "COMPLETED" || data.status === "FAILED") return false;
+      return 1000;
+    },
+  });
+
+  // Handle translate job completion
+  useEffect(() => {
+    if (translateJobStatus?.status === "COMPLETED" && translateJobStatus.resultData) {
+      setTranslatedText(translateJobStatus.resultData);
+      const timer = setTimeout(() => setTranslateJobId(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [translateJobStatus, setTranslatedText]);
+
+  // Auto-trigger translation if needed
+  useEffect(() => {
+    if (
+      workflowState === "translate_listen" &&
+      !translatedText &&
+      originalText &&
+      !translateMutation.isPending &&
+      !translateMutation.isError &&
+      !translateJobId
+    ) {
+      translateMutation.mutate();
+    }
+  }, [workflowState, translatedText, originalText, translateMutation, translateJobId]);
 
   const ttsMutation = useMutation({
     mutationFn: () => synthesizeSpeechJob(speechText!, settings.voice, settings.playbackSpeed),
@@ -102,10 +155,10 @@ export function PremiumAudioPlayer() {
   }, [jobStatus?.resultData, jobStatus?.progress, jobStatus?.status, audioUrl, setAudioUrl]);
 
   useEffect(() => {
-    if (!audioUrl && speechText && !ttsMutation.isPending && !ttsMutation.isError && !jobId) {
+    if (!audioUrl && speechText && !ttsMutation.isPending && !ttsMutation.isError && !jobId && !translateJobId) {
       ttsMutation.mutate();
     }
-  }, [audioUrl, speechText, ttsMutation, jobId]);
+  }, [audioUrl, speechText, ttsMutation, jobId, translateJobId]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -157,7 +210,12 @@ export function PremiumAudioPlayer() {
   return (
     <Card className="flex flex-col w-full h-full shadow-glass border-border/60 overflow-hidden relative bg-card/80 backdrop-blur-3xl min-h-[600px]">
       <AnimatePresence>
-        {jobId && !audioUrl && <ProgressOverlay job={jobStatus || null} title="Generating Audio" />}
+        {translateJobId && (
+          <ProgressOverlay job={translateJobStatus || null} title="Translating Document" />
+        )}
+        {jobId && !audioUrl && !translateJobId && (
+          <ProgressOverlay job={jobStatus || null} title="Generating Audio" />
+        )}
       </AnimatePresence>
 
       {audioUrl && (
@@ -251,8 +309,8 @@ export function PremiumAudioPlayer() {
                 size="icon"
                 className="h-20 w-20 rounded-full shadow-glass shrink-0"
                 onClick={() => setIsPlaying(!isPlaying)}
-                disabled={!audioUrl || ttsMutation.isPending}
-                isLoading={ttsMutation.isPending}
+                disabled={!audioUrl || ttsMutation.isPending || translateMutation.isPending}
+                isLoading={ttsMutation.isPending || translateMutation.isPending}
               >
                 {!ttsMutation.isPending && (
                   isPlaying ? <Pause size={32} className="fill-current" /> : <Play size={32} className="fill-current ml-2" />
@@ -289,6 +347,25 @@ export function PremiumAudioPlayer() {
               <div className="p-6 flex flex-col gap-6">
                 <h3 className="font-bold uppercase text-xs tracking-widest text-muted-foreground">Audio Settings</h3>
                 
+                {workflowState === "translate_listen" && (
+                  <div className="flex flex-col gap-3">
+                    <label className="text-sm font-semibold">Target Language</label>
+                    <Select 
+                      value={settings.targetLanguage} 
+                      onChange={(e) => {
+                        updateSettings({ targetLanguage: e.target.value as LanguageCode });
+                        setTranslatedText("");
+                        setAudioUrl("");
+                        setJobId(null);
+                      }}
+                    >
+                      {languages.map((language) => (
+                        <option key={language.code} value={language.code}>{language.label}</option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-3">
                   <label className="text-sm font-semibold">Voice Model</label>
                   <Select 
@@ -325,7 +402,7 @@ export function PremiumAudioPlayer() {
                   variant="outline" 
                   className="mt-4 w-full"
                   onClick={() => ttsMutation.mutate()}
-                  isLoading={ttsMutation.isPending || !!jobId}
+                  isLoading={ttsMutation.isPending || !!jobId || translateMutation.isPending || !!translateJobId}
                 >
                   Regenerate Audio
                 </Button>
