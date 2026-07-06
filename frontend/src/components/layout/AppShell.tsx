@@ -20,12 +20,12 @@ export function AppShell({ children }: PropsWithChildren) {
     <div className="min-h-screen flex flex-col bg-background text-foreground transition-colors duration-300 pb-16 md:pb-0">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-16 items-center px-4 md:px-8">
-          <NavLink className="flex items-center gap-3 mr-6" to="/" aria-label="ReadLingo AI home">
+          <NavLink className="flex items-center gap-3 mr-6" to="/" aria-label="AKM-Lingo home">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-glass">
               <BookOpenText size={22} />
             </div>
             <div className="flex flex-col">
-              <span className="font-bold leading-none tracking-tight text-lg">ReadLingo AI</span>
+              <span className="font-bold leading-none tracking-tight text-lg">AKM-Lingo</span>
               <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider mt-0.5">Read & Translate</span>
             </div>
           </NavLink>
